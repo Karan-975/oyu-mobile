@@ -134,6 +134,29 @@ class FieldValidation {
   }
 }
 
+class FieldCondition {
+  final String dependsOnKey;
+  final String operator;
+  final String? conditionValue;
+  final String action;
+
+  FieldCondition({
+    required this.dependsOnKey,
+    required this.operator,
+    this.conditionValue,
+    required this.action,
+  });
+
+  factory FieldCondition.fromJson(Map<String, dynamic> json) {
+    return FieldCondition(
+      dependsOnKey: json['depends_on_key'] as String? ?? '',
+      operator: json['operator'] as String? ?? 'equals',
+      conditionValue: json['condition_value']?.toString(),
+      action: json['action'] as String? ?? 'show',
+    );
+  }
+}
+
 class SurveyField {
   final String id;
   final String fieldKey;   // API: field_key
@@ -146,6 +169,7 @@ class SurveyField {
   final int orderIndex;
   final List<FieldOption> options;
   final List<FieldValidation> validations;
+  final List<FieldCondition> conditions;
 
   SurveyField({
     required this.id,
@@ -159,6 +183,7 @@ class SurveyField {
     required this.orderIndex,
     required this.options,
     required this.validations,
+    required this.conditions,
   });
 
   factory SurveyField.fromJson(Map<String, dynamic> json) {
@@ -178,6 +203,10 @@ class SurveyField {
           [],
       validations: (json['validations'] as List?)
               ?.map((v) => FieldValidation.fromJson(v as Map<String, dynamic>))
+              .toList() ??
+          [],
+      conditions: (json['conditions'] as List?)
+              ?.map((c) => FieldCondition.fromJson(c as Map<String, dynamic>))
               .toList() ??
           [],
     );

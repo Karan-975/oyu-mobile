@@ -382,17 +382,24 @@ class ApiService {
       _logger.i('Submitting survey for borehole: ${submission.boreholId}');
 
       if (submission.surveyModuleId == 'grievance') {
+        final rawCategory = submission.formData['category'];
+        final category = rawCategory is List
+            ? rawCategory.map((value) => value.toString()).join(', ')
+            : rawCategory?.toString();
+        final description = submission.formData['description']?.toString() ?? '';
+        final supportingDetails = Map<String, dynamic>.from(submission.formData)
+          ..remove('description');
         final response = await _dio.post(
           ApiConfig.grievancesEndpoint,
           data: {
             'borehole_id': submission.boreholId,
             'title': submission.formData['grievance_title'] ??
                 submission.formData['title'] ??
-                'Field grievance report',
-            'description': submission.formData['description'] ??
-                submission.formData['details'] ??
-                jsonEncode(submission.formData),
-            'category': submission.formData['category'],
+                (category?.isNotEmpty == true ? category : 'Field grievance report'),
+            'description': supportingDetails.isEmpty
+                ? description
+                : '$description\n\nSupporting details: ${jsonEncode(supportingDetails)}',
+            'category': category,
             'priority': submission.formData['priority'] ?? 'medium',
           },
         );
@@ -479,6 +486,16 @@ class ApiService {
     String boreholeId,
     String sampleCode,
     String? vialPhotoUrl,
+    {
+    String testType = 'post_rehabilitation',
+    String? testDate,
+    String? sampleCollectionDate,
+    String? sampleDescription,
+    String? waterAppearance,
+    String? testingRemarks,
+    String? nearbySourceImageUrl,
+    String? supportingAttachmentUrl,
+    }
   ) async {
     try {
       _logger.i('Creating water test sample for borehole: $boreholeId');
@@ -486,7 +503,16 @@ class ApiService {
         ApiConfig.waterTestingEndpoint,
         data: {
           'borehole_id': boreholeId,
+          'test_type': testType,
+          'test_date': testDate,
+          'sample_collection_date': sampleCollectionDate,
           'sample_code': sampleCode,
+          'sample_description': sampleDescription,
+          'water_appearance': waterAppearance,
+          'testing_remarks': testingRemarks,
+          'borehole_water_image_url': vialPhotoUrl,
+          'nearby_source_image_url': nearbySourceImageUrl,
+          'supporting_attachment_url': supportingAttachmentUrl,
           'vial_photo_url': vialPhotoUrl,
           'status': 'submitted',
         },

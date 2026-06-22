@@ -217,13 +217,31 @@ class DataProvider extends ChangeNotifier {
     required String boreholeId,
     required String sampleCode,
     String? vialPhotoUrl,
+    String testType = 'post_rehabilitation',
+    String? testDate,
+    String? sampleCollectionDate,
+    String? sampleDescription,
+    String? waterAppearance,
+    String? testingRemarks,
+    String? nearbySourceImageUrl,
   }) async {
     try {
       _isLoading = true;
       _error = null;
       notifyListeners();
       
-      final result = await _apiService.createWaterTest(boreholeId, sampleCode, vialPhotoUrl);
+      final result = await _apiService.createWaterTest(
+        boreholeId,
+        sampleCode,
+        vialPhotoUrl,
+        testType: testType,
+        testDate: testDate,
+        sampleCollectionDate: sampleCollectionDate,
+        sampleDescription: sampleDescription,
+        waterAppearance: waterAppearance,
+        testingRemarks: testingRemarks,
+        nearbySourceImageUrl: nearbySourceImageUrl,
+      );
       if (result != null) {
         _logger.i('Water test sample registered successfully');
         return true;

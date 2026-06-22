@@ -179,7 +179,7 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
       return;
     }
 
-    if (!_formKey.currentState!.validate()) {
+    if (!_formKey.currentState!.validate() || !_validateRequiredFields(_module!.allFields)) {
       _showSnack('Please fill all required fields.', isError: true);
       return;
     }
@@ -331,6 +331,7 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
       case 'image_upload':
         return 'image';
       case 'document_upload':
+      case 'file_upload':
         return 'file';
       case 'digital_signature':
         return 'signature';
@@ -594,7 +595,11 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
             child: _currentStep < sections.length - 1
                 ? ElevatedButton.icon(
                     onPressed: () {
-                      setState(() => _currentStep++);
+                      if (_validateRequiredFields(sections[_currentStep].fields)) {
+                        setState(() => _currentStep++);
+                      } else {
+                        _showSnack('Please fill all required fields in this section.', isError: true);
+                      }
                     },
                     icon: const Icon(Icons.arrow_forward),
                     label: const Text('Next'),
@@ -669,6 +674,7 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
   }
 
   Widget _buildFieldWidget(SurveyField field) {
+    if (!_isFieldVisible(field)) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -683,6 +689,78 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
         ],
       ),
     );
+  }
+
+  dynamic _fieldValue(String key) {
+    if (_controllers.containsKey(key)) return _controllers[key]!.text.trim();
+    return _formData[key];
+  }
+
+  bool _matchesCondition(FieldCondition condition) {
+    final value = _fieldValue(condition.dependsOnKey);
+    final expected = condition.conditionValue;
+    switch (condition.operator) {
+      case 'not_equals':
+        return value?.toString() != expected;
+      case 'contains':
+        return value is Iterable
+            ? value.map((item) => item.toString()).contains(expected)
+            : value?.toString().contains(expected ?? '') == true;
+      case 'greater_than':
+        return (num.tryParse(value?.toString() ?? '') ?? double.negativeInfinity) >
+            (num.tryParse(expected ?? '') ?? double.infinity);
+      case 'less_than':
+        return (num.tryParse(value?.toString() ?? '') ?? double.infinity) <
+            (num.tryParse(expected ?? '') ?? double.negativeInfinity);
+      case 'is_empty':
+        return value == null || value.toString().isEmpty || (value is Iterable && value.isEmpty);
+      case 'is_not_empty':
+        return value != null && value.toString().isNotEmpty && !(value is Iterable && value.isEmpty);
+      case 'equals':
+      default:
+        return value?.toString().toLowerCase() == expected?.toLowerCase();
+    }
+  }
+
+  bool _isFieldVisible(SurveyField field) {
+    if (field.conditions.isNotEmpty) {
+      for (final condition in field.conditions.where((c) => c.action == 'show')) {
+        if (!_matchesCondition(condition)) return false;
+      }
+      for (final condition in field.conditions.where((c) => c.action == 'hide')) {
+        if (_matchesCondition(condition)) return false;
+      }
+    }
+
+    final inferredDependencies = <String, (String, String)>{
+      'known_quality_issues_details': ('known_quality_issues', 'Yes'),
+      'new_components_details': ('new_components_installed', 'yes'),
+      'stove_type_boiling': ('boil_drinking_water', 'Yes'),
+      'time_spent_boiling': ('boil_drinking_water', 'Yes'),
+      'water_boiled_quantity': ('boil_drinking_water', 'Yes'),
+      'fuel_type_boiling': ('boil_drinking_water', 'Yes'),
+      'fuel_quantity_daily': ('boil_drinking_water', 'Yes'),
+      'daily_fuel_cost': ('boil_drinking_water', 'Yes'),
+    };
+    final dependency = inferredDependencies[field.fieldKey];
+    if (dependency == null) return true;
+    return _fieldValue(dependency.$1)?.toString().toLowerCase() == dependency.$2.toLowerCase();
+  }
+
+  bool _validateRequiredFields(List<SurveyField> fields) {
+    for (final field in fields) {
+      if (!field.isRequired || !_isFieldVisible(field)) continue;
+      final type = _normalizedType(field.fieldType);
+      if (type == 'gps') {
+        if (_gpsLat == null || _gpsLng == null) return false;
+        continue;
+      }
+      final value = _fieldValue(field.fieldKey);
+      if (value == null || value.toString().trim().isEmpty || (value is Iterable && value.isEmpty)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   Widget _fieldLabel(SurveyField field) {

@@ -339,13 +339,22 @@ class _RegisterSampleSheet extends StatefulWidget {
 class _RegisterSampleSheetState extends State<_RegisterSampleSheet> {
   final _formKey = GlobalKey<FormState>();
   final _barcodeCtrl = TextEditingController();
+  final _descriptionCtrl = TextEditingController();
+  final _remarksCtrl = TextEditingController();
   
   String? _vialPhotoPath;
+  String? _nearbySourcePhotoPath;
+  String _testType = 'post_rehabilitation';
+  String? _testDate;
+  String? _sampleCollectionDate;
+  String? _waterAppearance;
   bool _submitting = false;
 
   @override
   void dispose() {
     _barcodeCtrl.dispose();
+    _descriptionCtrl.dispose();
+    _remarksCtrl.dispose();
     super.dispose();
   }
 
@@ -367,8 +376,48 @@ class _RegisterSampleSheetState extends State<_RegisterSampleSheet> {
     }
   }
 
+  Future<void> _takeNearbySourcePhoto() async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1200,
+        imageQuality: 85,
+      );
+      if (picked != null) setState(() => _nearbySourcePhotoPath = picked.path);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error taking photo: $e'), backgroundColor: AppColors.error),
+      );
+    }
+  }
+
+  Future<void> _pickDate(bool sampleDate) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked == null) return;
+    final value = picked.toIso8601String().split('T').first;
+    setState(() {
+      if (sampleDate) {
+        _sampleCollectionDate = value;
+      } else {
+        _testDate = value;
+      }
+    });
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_testDate == null || _sampleCollectionDate == null || _vialPhotoPath == null || _nearbySourcePhotoPath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Test date, collection date, and both required images must be provided.'), backgroundColor: AppColors.error),
+      );
+      return;
+    }
     
     setState(() => _submitting = true);
     try {
@@ -382,12 +431,23 @@ class _RegisterSampleSheetState extends State<_RegisterSampleSheet> {
           throw Exception('Failed to upload vial photo.');
         }
       }
+      final nearbySourceUrl = await provider.uploadFile(_nearbySourcePhotoPath!);
+      if (nearbySourceUrl == null) {
+        throw Exception('Failed to upload nearby water source image.');
+      }
 
       // 2. Register sample collection
       final success = await provider.logWaterTestSample(
         boreholeId: widget.borehole.id,
         sampleCode: _barcodeCtrl.text.trim(),
         vialPhotoUrl: uploadUrl,
+        testType: _testType,
+        testDate: _testDate,
+        sampleCollectionDate: _sampleCollectionDate,
+        sampleDescription: _descriptionCtrl.text.trim(),
+        waterAppearance: _waterAppearance,
+        testingRemarks: _remarksCtrl.text.trim(),
+        nearbySourceImageUrl: nearbySourceUrl,
       );
 
       if (success) {
@@ -437,10 +497,29 @@ class _RegisterSampleSheetState extends State<_RegisterSampleSheet> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Register the barcode of the collected sample vial and capture a photo.',
+              'Capture the required water testing details and supporting images.',
               style: GoogleFonts.inter(fontSize: 12, color: AppColors.muted),
             ),
             const SizedBox(height: 20),
+
+            DropdownButtonFormField<String>(
+              value: _testType,
+              decoration: const InputDecoration(labelText: 'Test Type *'),
+              items: const [
+                DropdownMenuItem(value: 'pre_rehabilitation', child: Text('Pre-Rehabilitation')),
+                DropdownMenuItem(value: 'post_rehabilitation', child: Text('Post-Rehabilitation')),
+              ],
+              onChanged: (value) => setState(() => _testType = value ?? _testType),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: _DateField(label: 'Test Date *', value: _testDate, onTap: () => _pickDate(false))),
+                const SizedBox(width: 10),
+                Expanded(child: _DateField(label: 'Sample Collection *', value: _sampleCollectionDate, onTap: () => _pickDate(true))),
+              ],
+            ),
+            const SizedBox(height: 16),
 
             // Barcode Input
             TextFormField(
@@ -453,10 +532,31 @@ class _RegisterSampleSheetState extends State<_RegisterSampleSheet> {
               validator: (v) => (v == null || v.trim().isEmpty) ? 'Barcode/ID is required' : null,
             ),
             const SizedBox(height: 16),
+            TextFormField(
+              controller: _descriptionCtrl,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'Sample Description', hintText: 'Describe the sample and collection point'),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: _waterAppearance,
+              decoration: const InputDecoration(labelText: 'Water Appearance'),
+              items: const ['Clear', 'Cloudy', 'Yellow-Brown', 'Green', 'Coloured', 'Other']
+                  .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+                  .toList(),
+              onChanged: (value) => setState(() => _waterAppearance = value),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _remarksCtrl,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'Testing Remarks'),
+            ),
+            const SizedBox(height: 16),
 
             // Photo Capture
             Text(
-              'Water Sample Vial Photo',
+              'Borehole Water Image *',
               style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.navy),
             ),
             const SizedBox(height: 8),
@@ -493,6 +593,33 @@ class _RegisterSampleSheetState extends State<_RegisterSampleSheet> {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            Text('Nearby Water Source Image *', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.navy)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (_nearbySourcePhotoPath != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.file(File(_nearbySourcePhotoPath!), height: 80, width: 80, fit: BoxFit.cover),
+                  )
+                else
+                  Container(
+                    height: 80,
+                    width: 80,
+                    decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+                    child: const Icon(Icons.water_outlined, color: AppColors.subtle, size: 28),
+                  ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _takeNearbySourcePhoto,
+                    icon: const Icon(Icons.camera_alt),
+                    label: Text(_nearbySourcePhotoPath != null ? 'Retake Photo' : 'Capture Source Photo'),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
 
             // Submit Button
@@ -506,6 +633,31 @@ class _RegisterSampleSheetState extends State<_RegisterSampleSheet> {
                       child: const Text('Submit Sample Registration'),
                     ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DateField extends StatelessWidget {
+  final String label;
+  final String? value;
+  final VoidCallback onTap;
+
+  const _DateField({required this.label, required this.value, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: InputDecorator(
+        decoration: InputDecoration(labelText: label),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_today_outlined, size: 16),
+            const SizedBox(width: 6),
+            Expanded(child: Text(value ?? 'Select', overflow: TextOverflow.ellipsis)),
           ],
         ),
       ),
