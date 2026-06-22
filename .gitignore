@@ -51,3 +51,10 @@ android/local.properties
 # Firebase / Google Services files
 **/android/app/google-services.json
 **/ios/Runner/GoogleService-Info.plist
+node_modules/
+android/.gradle/
+android/app/build/
+android/build/
+ios/Pods/
+ios/build/
+.env
