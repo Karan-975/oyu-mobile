@@ -16,6 +16,37 @@ double? _parseDoubleNullable(dynamic val) {
   return null;
 }
 
+String _parseString(dynamic val, [String fallback = '']) {
+  if (val == null) return fallback;
+  return val.toString();
+}
+
+bool _parseBool(dynamic val) {
+  if (val == true || val == 1) return true;
+  if (val is String) {
+    final normalized = val.toLowerCase().trim();
+    return normalized == 'true' || normalized == '1' || normalized == 'yes';
+  }
+  return false;
+}
+
+int _parseInt(dynamic val, [int fallback = 0]) {
+  if (val is int) return val;
+  if (val is num) return val.toInt();
+  if (val is String) return int.tryParse(val) ?? fallback;
+  return fallback;
+}
+
+List<Map<String, dynamic>> _parseMapList(dynamic value) {
+  if (value is List) {
+    return value
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+  return [];
+}
+
 // Borehole model
 class Borehole {
   final String id;
@@ -110,9 +141,9 @@ class FieldOption {
 
   factory FieldOption.fromJson(Map<String, dynamic> json) {
     return FieldOption(
-      id: json['id'] as String? ?? '',
-      label: json['label'] as String? ?? '',
-      value: json['value'] as String? ?? '',
+      id: _parseString(json['id']),
+      label: _parseString(json['label']),
+      value: _parseString(json['value']),
       score: _parseDoubleNullable(json['score']),
     );
   }
@@ -127,7 +158,7 @@ class FieldValidation {
 
   factory FieldValidation.fromJson(Map<String, dynamic> json) {
     return FieldValidation(
-      ruleType: json['rule_type'] as String? ?? '',
+      ruleType: _parseString(json['rule_type']),
       ruleValue: json['rule_value'] as String?,
       message: json['message'] as String?,
     );
@@ -149,10 +180,10 @@ class FieldCondition {
 
   factory FieldCondition.fromJson(Map<String, dynamic> json) {
     return FieldCondition(
-      dependsOnKey: json['depends_on_key'] as String? ?? '',
-      operator: json['operator'] as String? ?? 'equals',
+      dependsOnKey: _parseString(json['depends_on_key']),
+      operator: _parseString(json['operator'], 'equals'),
       conditionValue: json['condition_value']?.toString(),
-      action: json['action'] as String? ?? 'show',
+      action: _parseString(json['action'], 'show'),
     );
   }
 }
@@ -188,27 +219,18 @@ class SurveyField {
 
   factory SurveyField.fromJson(Map<String, dynamic> json) {
     return SurveyField(
-      id: json['id'] as String? ?? '',
-      fieldKey: json['field_key'] as String? ?? '',
-      label: json['label'] as String? ?? '',
-      fieldType: json['field_type'] as String? ?? 'text',
+      id: _parseString(json['id']),
+      fieldKey: _parseString(json['field_key'] ?? json['key']),
+      label: _parseString(json['label']),
+      fieldType: _parseString(json['field_type'] ?? json['type'], 'text'),
       placeholder: json['placeholder'] as String?,
       helpText: json['help_text'] as String?,
-      isRequired: (json['is_required'] == true || json['is_required'] == 1),
-      hasScoring: (json['has_scoring'] == true || json['has_scoring'] == 1),
-      orderIndex: json['order_index'] as int? ?? 0,
-      options: (json['options'] as List?)
-              ?.map((o) => FieldOption.fromJson(o as Map<String, dynamic>))
-              .toList() ??
-          [],
-      validations: (json['validations'] as List?)
-              ?.map((v) => FieldValidation.fromJson(v as Map<String, dynamic>))
-              .toList() ??
-          [],
-      conditions: (json['conditions'] as List?)
-              ?.map((c) => FieldCondition.fromJson(c as Map<String, dynamic>))
-              .toList() ??
-          [],
+      isRequired: _parseBool(json['is_required'] ?? json['required']),
+      hasScoring: _parseBool(json['has_scoring']),
+      orderIndex: _parseInt(json['order_index']),
+      options: _parseMapList(json['options']).map(FieldOption.fromJson).toList(),
+      validations: _parseMapList(json['validations']).map(FieldValidation.fromJson).toList(),
+      conditions: _parseMapList(json['conditions']).map(FieldCondition.fromJson).toList(),
     );
   }
 }
@@ -230,14 +252,11 @@ class SurveySection {
 
   factory SurveySection.fromJson(Map<String, dynamic> json) {
     return SurveySection(
-      id: json['id'] as String? ?? '',
-      title: json['title'] as String? ?? '',
+      id: _parseString(json['id']),
+      title: _parseString(json['title']),
       description: json['description'] as String?,
-      orderIndex: json['order_index'] as int? ?? 0,
-      fields: (json['fields'] as List?)
-              ?.map((f) => SurveyField.fromJson(f as Map<String, dynamic>))
-              .toList() ??
-          [],
+      orderIndex: _parseInt(json['order_index']),
+      fields: _parseMapList(json['fields']).map(SurveyField.fromJson).toList(),
     );
   }
 }
@@ -261,15 +280,12 @@ class SurveyModule {
 
   factory SurveyModule.fromJson(Map<String, dynamic> json) {
     return SurveyModule(
-      id: json['id'] as String? ?? '',
-      slug: json['slug'] as String? ?? '',
-      name: json['name'] as String? ?? '',
+      id: _parseString(json['id']),
+      slug: _parseString(json['slug'] ?? json['module_type']),
+      name: _parseString(json['name']),
       description: json['description'] as String?,
-      isMultiStep: (json['is_multi_step'] == true || json['is_multi_step'] == 1),
-      sections: (json['sections'] as List?)
-              ?.map((s) => SurveySection.fromJson(s as Map<String, dynamic>))
-              .toList() ??
-          [],
+      isMultiStep: _parseBool(json['is_multi_step']),
+      sections: _parseMapList(json['sections']).map(SurveySection.fromJson).toList(),
     );
   }
 

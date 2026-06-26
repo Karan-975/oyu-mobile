@@ -260,29 +260,17 @@ class _SurveyStartScreen extends StatelessWidget {
               height: 52,
               child: ElevatedButton.icon(
                 onPressed: () {
-                  if (surveyCode == 'rehabilitation') {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => RehabilitationAgreementScreen(
-                          borehole: borehole,
-                        ),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DynamicSurveyFormScreen(
+                        borehole: borehole,
+                        surveyCode: surveyCode,
+                        surveyName: title,
                       ),
-                    );
-                  } else {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => DynamicSurveyFormScreen(
-                          borehole: borehole,
-                          surveyCode: surveyCode,
-                          surveyName: title,
-                        ),
-                      ),
-                    );
-                  }
-                },
-                icon: const Icon(Icons.arrow_forward),
+                    ),
+                  );
+                },                icon: const Icon(Icons.arrow_forward),
                 label: const Text(
                   'Continue to Form',
                   style: TextStyle(fontWeight: FontWeight.w700),

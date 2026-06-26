@@ -414,6 +414,35 @@ class ApiService {
         return null;
       }
 
+      if (submission.surveyModuleId == 'water_testing') {
+        final response = await _dio.post(
+          ApiConfig.waterTestingEndpoint,
+          data: {
+            'borehole_id': submission.boreholId,
+            'test_type': submission.formData['test_type'] ?? 'post_rehabilitation',
+            'test_date': submission.formData['test_date'],
+            'sample_collection_date': submission.formData['sample_collection_date'],
+            'sample_code': submission.formData['sample_code'],
+            'sample_description': submission.formData['sample_description'],
+            'water_appearance': submission.formData['water_appearance'],
+            'testing_remarks': submission.formData['testing_remarks'],
+            'borehole_water_image_url': submission.formData['borehole_water_images'],
+            'nearby_source_image_url': submission.formData['nearby_water_source_images'],
+            'supporting_attachment_url': submission.formData['supporting_attachments'],
+            'collected_by': submission.formData['collected_by'],
+            'status': 'submitted',
+          },
+        );
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          return SurveySubmission(
+            boreholId: submission.boreholId,
+            surveyModuleId: submission.surveyModuleId,
+            formData: submission.formData,
+            status: 'submitted',
+          );
+        }
+        return null;
+      }
       if (submission.surveyModuleId == 'rehabilitation') {
         final response = await _dio.post(
           ApiConfig.rehabilitationEndpoint,
@@ -603,9 +632,12 @@ class ApiService {
       try { parsed = jsonDecode(parsed); } catch (_) { return []; }
     }
     if (parsed is Map) {
-      if (parsed.containsKey('data') && parsed['data'] is List) {
-        return parsed['data'] as List;
-      }
+      final data = parsed['data'];
+      if (data is List) return data;
+      if (data is Map && data['data'] is List) return data['data'] as List;
+      if (parsed['items'] is List) return parsed['items'] as List;
+      if (parsed['records'] is List) return parsed['records'] as List;
+      if (parsed['results'] is List) return parsed['results'] as List;
     }
     if (parsed is List) return parsed;
     return [];

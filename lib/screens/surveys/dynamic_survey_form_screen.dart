@@ -7,6 +7,8 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:signature/signature.dart';
 import '../../models/data_models.dart';
 import '../../services/api_service.dart';
+import 'frs_survey_forms.dart';
+import '../../widgets/common/checkbox_group.dart';
 
 /// Renders backend-configured survey forms for NGO field workflows.
 class DynamicSurveyFormScreen extends StatefulWidget {
@@ -75,7 +77,8 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
     });
     try {
       final api = context.read<ApiService>();
-      final module = await api.getSurveyModule(widget.surveyCode);
+      final fetchedModule = await api.getSurveyModule(widget.surveyCode);
+      final module = _withFallbackFields(fetchedModule);
       if (module == null) {
         setState(() {
           _error = 'Survey form not found. Please contact your administrator.';
@@ -83,7 +86,7 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
         });
         return;
       }
-      
+
       // Prefill initial data
       if (widget.initialData != null) {
         _formData.addAll(widget.initialData!);
@@ -99,12 +102,30 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
           }
         }
       }
-      
+
       setState(() {
         _module = module;
         _loading = false;
       });
     } catch (e) {
+      final fallback = _fallbackModule(widget.surveyCode);
+      if (fallback != null) {
+        if (widget.initialData != null) {
+          _formData.addAll(widget.initialData!);
+        }
+        for (final field in fallback.allFields) {
+          final type = _normalizedType(field.fieldType);
+          if (['text', 'number', 'email', 'phone', 'textarea'].contains(type)) {
+            final val = widget.initialData?[field.fieldKey]?.toString() ?? '';
+            _controllers[field.fieldKey] = TextEditingController(text: val);
+          }
+        }
+        setState(() {
+          _module = fallback;
+          _loading = false;
+        });
+        return;
+      }
       setState(() {
         _error = 'Failed to load survey: $e';
         _loading = false;
@@ -112,6 +133,17 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
     }
   }
 
+  SurveyModule? _withFallbackFields(SurveyModule? module) {
+    final fallback = _fallbackModule(widget.surveyCode);
+    if (module == null) return fallback;
+    final hasFields = module.sections.any((section) => section.fields.isNotEmpty);
+    if (hasFields || fallback == null) return module;
+    return fallback;
+  }
+
+  SurveyModule? _fallbackModule(String surveyCode) {
+    return FrsSurveyForms.moduleFor(surveyCode);
+  }
   Future<void> _captureGps() async {
     setState(() => _fetchingGps = true);
     try {
@@ -173,6 +205,19 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
     }
   }
 
+  Future<void> _pickVideo(String fieldKey) async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickVideo(source: ImageSource.camera);
+      if (picked != null) {
+        setState(() {
+          _formData[fieldKey] = picked.path;
+        });
+      }
+    } catch (e) {
+      _showSnack('Error picking video: $e', isError: true);
+    }
+  }
   Future<void> _submit() async {
     if (widget.isLocked) {
       _showSnack('Form is locked and cannot be submitted.', isError: true);
@@ -222,7 +267,7 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
       for (final section in _module!.sections) {
         for (final field in section.fields) {
           final type = _normalizedType(field.fieldType);
-          if (['image', 'file', 'signature'].contains(type)) {
+          if (['image', 'file', 'signature', 'video'].contains(type)) {
             final localPath = _formData[field.fieldKey];
             if (localPath is String && localPath.isNotEmpty && !localPath.startsWith('http')) {
               _showSnack('Uploading ${field.label}...', isError: false);
@@ -734,6 +779,21 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
 
     final inferredDependencies = <String, (String, String)>{
       'known_quality_issues_details': ('known_quality_issues', 'Yes'),
+      'pump_type': ('is_manual_handpump', 'Yes'),
+      't7_q1': ('pump_type', 'T7 Mono'),
+      't7_q2': ('pump_type', 'T7 Mono'),
+      't7_q3': ('pump_type', 'T7 Mono'),
+      't7_q4': ('pump_type', 'T7 Mono'),
+      't7_q5': ('pump_type', 'T7 Mono'),
+      't7_q6': ('pump_type', 'T7 Mono'),
+      'af_q1': ('pump_type', 'Afridev'),
+      'af_q2': ('pump_type', 'Afridev'),
+      'af_q3': ('pump_type', 'Afridev'),
+      'af_q4': ('pump_type', 'Afridev'),
+      'af_q5': ('pump_type', 'Afridev'),
+      'af_q6': ('pump_type', 'Afridev'),
+      'known_quality_issues_specify': ('known_quality_issues', 'Yes'),
+      'chlorine_dispenser_photo': ('mon_cdi_photo_taken', 'Yes'),
       'new_components_details': ('new_components_installed', 'yes'),
       'stove_type_boiling': ('boil_drinking_water', 'Yes'),
       'time_spent_boiling': ('boil_drinking_water', 'Yes'),
@@ -747,6 +807,67 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
     return _fieldValue(dependency.$1)?.toString().toLowerCase() == dependency.$2.toLowerCase();
   }
 
+  bool _isMutuallyExclusiveCheckbox(SurveyField field) {
+    const keys = {
+      'cdi_installed',
+      'cdi_functional',
+      'cdi_chlorine_loaded',
+      'cdi_community_informed',
+      'cdi_users_trained',
+      'cdi_smell_after_install',
+      'mon_cdi_present',
+      'mon_cdi_working',
+      'mon_cdi_chlorine_available',
+      'mon_cdi_refilled',
+      'mon_cdi_photo_taken',
+      'mon_cdi_taste_smell',
+      'mon_cdi_acceptability',
+      'mon_cdi_complaints',
+      'mon_cdi_collection_pattern',
+      'mon_cdi_safer_water',
+      'mon_cdi_operator_checked',
+    };
+    return keys.contains(field.fieldKey);
+  }
+
+  Widget _scoreBadge(double? score) {
+    if (score == null) return const SizedBox.shrink();
+    final clean = score == score.roundToDouble() ? score.toInt().toString() : score.toString();
+    return Container(
+      margin: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.teal.shade600,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text('+$clean', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+    );
+  }
+  void _cleanupDependentValues(String fieldKey, String? value) {
+    if (fieldKey == 'is_manual_handpump' && value != 'Yes') {
+      _formData.remove('pump_type');
+      for (final key in ['t7_q1','t7_q2','t7_q3','t7_q4','t7_q5','t7_q6','af_q1','af_q2','af_q3','af_q4','af_q5','af_q6']) {
+        _formData.remove(key);
+      }
+    }
+    if (fieldKey == 'pump_type') {
+      final clearKeys = value == 'T7 Mono'
+          ? ['af_q1','af_q2','af_q3','af_q4','af_q5','af_q6']
+          : ['t7_q1','t7_q2','t7_q3','t7_q4','t7_q5','t7_q6'];
+      for (final key in clearKeys) {
+        _formData.remove(key);
+      }
+    }
+    if (fieldKey == 'known_quality_issues' && value != 'Yes') {
+      _formData.remove('known_quality_issues_details');
+      _formData.remove('known_quality_issues_specify');
+      _controllers['known_quality_issues_details']?.clear();
+      _controllers['known_quality_issues_specify']?.clear();
+    }
+    if (fieldKey == 'mon_cdi_photo_taken' && value != 'Yes') {
+      _formData.remove('chlorine_dispenser_photo');
+    }
+  }
   bool _validateRequiredFields(List<SurveyField> fields) {
     for (final field in fields) {
       if (!field.isRequired || !_isFieldVisible(field)) continue;
@@ -899,10 +1020,13 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
         children: options.map((opt) {
           return RadioListTile<String>(
             dense: true,
-            title: Text(opt.label, style: const TextStyle(fontSize: 14)),
+            title: Row(children: [Expanded(child: Text(opt.label, style: const TextStyle(fontSize: 14))), _scoreBadge(opt.score)]),
             value: opt.value,
             groupValue: val,
-            onChanged: (v) => setState(() => _formData[field.fieldKey] = v),
+            onChanged: (v) => setState(() {
+              _formData[field.fieldKey] = v;
+              _cleanupDependentValues(field.fieldKey, v);
+            }),
           );
         }).toList(),
       ),
@@ -910,6 +1034,35 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
   }
 
   Widget _checkboxField(SurveyField field) {
+    if (_isMutuallyExclusiveCheckbox(field)) {
+      final selected = _formData[field.fieldKey] as String?;
+      return CheckboxGroup(
+        selectedValue: selected,
+        options: field.options.map((option) => option.label).toList(),
+        onChanged: (value) {
+          setState(() {
+            _formData[field.fieldKey] = value;
+            if (field.fieldKey == 'is_manual_handpump' && value != 'Yes') {
+              _formData.remove('pump_type');
+              for (final key in ['t7_q1','t7_q2','t7_q3','t7_q4','t7_q5','t7_q6','af_q1','af_q2','af_q3','af_q4','af_q5','af_q6']) {
+                _formData.remove(key);
+              }
+            }
+            if (field.fieldKey == 'pump_type') {
+              for (final key in value == 'T7 Mono'
+                  ? ['af_q1','af_q2','af_q3','af_q4','af_q5','af_q6']
+                  : ['t7_q1','t7_q2','t7_q3','t7_q4','t7_q5','t7_q6']) {
+                _formData.remove(key);
+              }
+            }
+            if (field.fieldKey == 'known_quality_issues' && value != 'Yes') {
+              _formData.remove('known_quality_issues_specify');
+              _controllers['known_quality_issues_specify']?.clear();
+            }
+          });
+        },
+      );
+    }
     final selected =
         (_formData[field.fieldKey] as List<String>?) ?? <String>[];
     return Card(
@@ -922,7 +1075,7 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
         children: field.options.map((opt) {
           return CheckboxListTile(
             dense: true,
-            title: Text(opt.label, style: const TextStyle(fontSize: 14)),
+            title: Row(children: [Expanded(child: Text(opt.label, style: const TextStyle(fontSize: 14))), if ((opt.score ?? 0) > 0) _scoreBadge(opt.score)]),
             value: selected.contains(opt.value),
             onChanged: (v) {
               setState(() {
@@ -1007,6 +1160,17 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
     );
   }
 
+  bool _uploadEarnsScore(String key) {
+    const keys = {
+      'upload_stove_image',
+      'before_rehab_photos',
+      'during_rehab_photos',
+      'after_rehab_photos',
+      'upload_monitoring_photo',
+      'rehabilitated_borehole_image',
+    };
+    return keys.contains(key);
+  }
   Widget _imageFieldCard(SurveyField field) {
     final pickedPath = _formData[field.fieldKey] as String?;
     return Card(
@@ -1045,7 +1209,7 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
                   child: ElevatedButton.icon(
                     onPressed: () => _pickImage(field.fieldKey, ImageSource.camera),
                     icon: const Icon(Icons.camera_alt_outlined, size: 18),
-                    label: const Text('Camera', style: TextStyle(fontSize: 12)),
+                    label: Text(cameraOnly ? 'Take Photo' : 'Camera', style: const TextStyle(fontSize: 12)),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1071,6 +1235,52 @@ class _DynamicSurveyFormScreenState extends State<DynamicSurveyFormScreen> {
     );
   }
 
+  Widget _videoFieldCard(SurveyField field) {
+    final pickedPath = _formData[field.fieldKey] as String?;
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: Colors.grey.shade300),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (pickedPath != null) ...[
+              Row(
+                children: [
+                  Icon(Icons.videocam, color: Colors.blue.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      pickedPath.startsWith('http') ? 'Video uploaded' : 'Video captured',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () => setState(() => _formData.remove(field.fieldKey)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+            ],
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _pickVideo(field.fieldKey),
+                icon: const Icon(Icons.videocam_outlined, size: 18),
+                label: Text(pickedPath != null ? 'Retake Video' : 'Record Video'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   Widget _signatureFieldCard(SurveyField field) {
     final pickedPath = _formData[field.fieldKey] as String?;
     final sigController = _sigControllers[field.fieldKey] ??= SignatureController(

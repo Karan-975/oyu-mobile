@@ -6,6 +6,7 @@ import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_widgets.dart';
 import '../water_testing/water_testing_screen.dart';
+import 'dynamic_survey_form_screen.dart';
 import 'survey_start_screens.dart';
 
 enum _SurveyStatus {
@@ -150,7 +151,11 @@ class _SurveySelectionScreenState extends State<SurveySelectionScreen> {
           description: 'Register water samples, vials, and track tests.',
           icon: Icons.biotech_outlined,
           color: Colors.blue,
-          builder: (_) => WaterTestingScreen(borehole: widget.borehole),
+          builder: (_) => DynamicSurveyFormScreen(
+            borehole: widget.borehole,
+            surveyCode: 'water_testing',
+            surveyName: 'Water Testing',
+          ),
         ),
       ];
 
@@ -248,7 +253,7 @@ class _SurveySelectionScreenState extends State<SurveySelectionScreen> {
     return seq % 8 == 0;
   }
 
-  bool _isFlowTwoLocked(String moduleSlug) {
+  bool _isDependentModuleLocked(String moduleSlug) {
     if (!_completedModules.contains('basic_info')) {
       return true;
     }
@@ -271,7 +276,7 @@ class _SurveySelectionScreenState extends State<SurveySelectionScreen> {
     }
   }
 
-  String _flowTwoLockReason(String moduleSlug) {
+  String _dependentModuleLockReason(String moduleSlug) {
     if (!_completedModules.contains('basic_info')) {
       return 'Locked until Basic Info is verified.';
     }
@@ -388,19 +393,19 @@ class _SurveySelectionScreenState extends State<SurveySelectionScreen> {
       );
     }
 
-    // It is active and assigned to me! But check sequential locks (only Flow 2)
+    // It is active and assigned to me, but dependent modules still obey sequence locks.
     final isSequential = moduleSlug == 'borehole_recce' ||
         moduleSlug == 'baseline_survey' ||
         moduleSlug == 'rehabilitation' ||
         moduleSlug == 'monitoring_survey';
 
     if (isSequential) {
-      final isLocked = _isFlowTwoLocked(moduleSlug);
+      final isLocked = _isDependentModuleLocked(moduleSlug);
       if (isLocked) {
         return _SurveyStatusInfo(
           status: _SurveyStatus.locked,
           label: 'Locked',
-          subtitle: _flowTwoLockReason(moduleSlug),
+          subtitle: _dependentModuleLockReason(moduleSlug),
           isClickable: false,
         );
       }
@@ -416,14 +421,14 @@ class _SurveySelectionScreenState extends State<SurveySelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final flowOne = _allSurveys()
+    final independentModules = _allSurveys()
         .where((survey) =>
             survey.moduleSlug == 'lsc_survey' ||
             survey.moduleSlug == 'grievance' ||
             survey.moduleSlug == 'water_testing')
         .toList();
 
-    final flowTwo = _allSurveys()
+    final dependentModules = _allSurveys()
         .where((survey) =>
             survey.moduleSlug == 'basic_info' ||
             survey.moduleSlug == 'borehole_recce' ||
@@ -509,23 +514,23 @@ class _SurveySelectionScreenState extends State<SurveySelectionScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Flow 1
-                    _FlowSection(
-                      title: 'Flow 1 - Independent Actions',
-                      subtitle: 'LSC Consultation & Grievances (can be done anytime)',
+                    // Independent modules
+                    _ModuleSection(
+                      title: 'Independent Modules',
+                      subtitle: 'LSC, Grievance, and Water Testing can be done anytime',
                       color: AppColors.flow1,
-                      items: flowOne,
+                      items: independentModules,
                       getStatusInfo: _getSurveyStatusInfo,
                     ),
 
                     const SizedBox(height: 16),
 
-                    // Flow 2
-                    _FlowSection(
-                      title: 'Flow 2 - Sequential Lifecycle',
-                      subtitle: 'Sequence: Recce → Baseline → Rehabilitation → Monitoring',
+                    // Dependent modules
+                    _ModuleSection(
+                      title: 'Dependent Modules',
+                      subtitle: 'Sequence: Basic Info -> Recce -> Baseline -> Rehabilitation -> Monitoring',
                       color: AppColors.flow2,
-                      items: flowTwo,
+                      items: dependentModules,
                       getStatusInfo: _getSurveyStatusInfo,
                       isSequential: true,
                     ),
@@ -535,7 +540,7 @@ class _SurveySelectionScreenState extends State<SurveySelectionScreen> {
   }
 }
 
-class _FlowSection extends StatelessWidget {
+class _ModuleSection extends StatelessWidget {
   final String title;
   final String subtitle;
   final Color color;
@@ -543,7 +548,7 @@ class _FlowSection extends StatelessWidget {
   final _SurveyStatusInfo Function(String) getStatusInfo;
   final bool isSequential;
 
-  const _FlowSection({
+  const _ModuleSection({
     required this.title,
     required this.subtitle,
     required this.color,
@@ -792,3 +797,5 @@ class _SurveyMenuItem {
     required this.builder,
   });
 }
+
+
